@@ -1,4 +1,4 @@
-import { defineConfig } from 'vite';
+import { defineConfig } from 'vitest/config';
 import path from 'path';
 
 export default defineConfig({
@@ -7,4 +7,21 @@ export default defineConfig({
       '@': path.resolve(__dirname, './'),
     },
   },
+
+  test: {
+    environment: 'jsdom',
+
+    coverage: {
+      provider: 'c8',
+      reporter: ['text', 'lcov', 'html'],
+      reportsDirectory: './coverage',
+      exclude: [
+        'node_modules/',
+        'coverage/',
+        '**/*.config.*',
+        '**/*.d.ts',
+        '**/__tests__/**'
+      ]
+    }
+  }
 });
