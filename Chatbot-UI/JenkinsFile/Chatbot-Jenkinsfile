@@ -1,86 +1,281 @@
-pipeline{
+pipeline {
+
     agent any
-    tools{
+
+    tools {
         jdk 'jdk17'
         nodejs 'node19'
     }
+
     environment {
-        SCANNER_HOME=tool 'sonar-scanner'
+        SCANNER_HOME = tool 'sonar-scanner'
+        DOCKER_IMAGE = 'devopsvishal077758/chatbot:latest'
     }
+
     stages {
-        stage('Checkout from Git'){
-            steps{
-                git 'https://github.com/Prajakta740/DevOps-Project-28'
+
+        stage('Checkout from Git') {
+            steps {
+                git(
+                    branch: 'main',
+                    url: 'https://github.com/Prajakta740/DevOps-Project-28.git'
+                )
             }
         }
+
         stage('Install Dependencies') {
             steps {
-                sh "npm install"
+                dir('Chatbot-UI') {
+                    sh '''
+                        echo "Installing Node dependencies..."
+                        npm ci
+                    '''
+                }
             }
         }
-        stage("Sonarqube Analysis "){
-            steps{
+
+        stage('Run Tests and Coverage') {
+            steps {
+                dir('Chatbot-UI') {
+                    sh '''
+                        echo "Running tests and generating coverage..."
+                        npm run coverage
+                    '''
+                }
+            }
+        }
+
+        stage('Verify Coverage Report') {
+            steps {
+                sh '''
+                    echo "Checking SonarQube coverage report..."
+
+                    if [ -d "Chatbot-UI/coverage" ]; then
+                        ls -lah Chatbot-UI/coverage/
+                    else
+                        echo "Coverage directory not found!"
+                        exit 1
+                    fi
+
+                    if [ -f "Chatbot-UI/coverage/lcov.info" ]; then
+                        echo "LCOV report found successfully."
+                    else
+                        echo "ERROR: lcov.info not found!"
+                        exit 1
+                    fi
+                '''
+            }
+        }
+
+        stage('SonarQube Analysis') {
+            steps {
                 withSonarQubeEnv('sonar-server') {
-                    sh ''' $SCANNER_HOME/bin/sonar-scanner -Dsonar.projectName=Chatbot \
-                    -Dsonar.projectKey=Chatbot '''
+                    sh '''
+                        echo "Starting SonarQube analysis..."
+
+                        $SCANNER_HOME/bin/sonar-scanner \
+                            -Dsonar.projectName=Chatbot \
+                            -Dsonar.projectKey=Chatbot \
+                            -Dsonar.sources=Chatbot-UI \
+                            -Dsonar.javascript.lcov.reportPaths=Chatbot-UI/coverage/lcov.info \
+                            -Dsonar.exclusions=Chatbot-UI/node_modules/**,Chatbot-UI/coverage/**,Chatbot-UI/__tests__/**
+                    '''
                 }
             }
         }
-        stage("quality gate"){
-           steps {
+
+        stage('Quality Gate') {
+            steps {
+                timeout(time: 10, unit: 'MINUTES') {
+                    waitForQualityGate(
+                        abortPipeline: true,
+                        credentialsId: 'sonar-token'
+                    )
+                }
+            }
+        }
+
+        stage('OWASP FS Scan') {
+            steps {
+                dependencyCheck(
+                    additionalArguments: '--scan ./ --disableYarnAudit --disableNodeAudit',
+                    odcInstallation: 'DP-Check'
+                )
+
+                dependencyCheckPublisher(
+                    pattern: '**/dependency-check-report.xml'
+                )
+            }
+        }
+
+        stage('Trivy FS Scan') {
+            steps {
+                sh '''
+                    echo "Running Trivy filesystem scan..."
+
+                    trivy fs \
+                        --severity HIGH,CRITICAL \
+                        --format table \
+                        . | tee trivyfs.txt
+                '''
+            }
+        }
+
+        stage('Docker Login') {
+            steps {
                 script {
-                    waitForQualityGate abortPipeline: false, credentialsId: 'sonar-token' 
-                }
-            } 
-        }
-        stage('OWASP FS SCAN') {
-            steps {
-                dependencyCheck additionalArguments: '--scan ./ --disableYarnAudit --disableNodeAudit', odcInstallation: 'DP-Check'
-                dependencyCheckPublisher pattern: '**/dependency-check-report.xml'
-            }
-        }
-        stage('TRIVY FS SCAN') {
-            steps {
-                sh "trivy fs . > trivyfs.json"
-            }
-        }
-        stage("Docker Build & Push"){
-            steps{
-                script{
-                   withDockerRegistry(credentialsId: 'docker-cred', toolName: 'docker'){   
-                       sh "docker build -t chatbot ."
-                       sh "docker tag chatbot devopsvishal077758/chatbot:latest "
-                       sh "docker push devopsvishal077758/chatbot:latest "
+                    withCredentials([
+                        usernamePassword(
+                            credentialsId: 'docker-cred',
+                            usernameVariable: 'DOCKER_USERNAME',
+                            passwordVariable: 'DOCKER_PASSWORD'
+                        )
+                    ]) {
+                        sh '''
+                            set -e
+
+                            echo "Docker version:"
+                            docker --version
+
+                            echo "Checking Docker daemon..."
+                            docker info > /dev/null
+
+                            echo "Logging into Docker Hub..."
+
+                            echo "$DOCKER_PASSWORD" | docker login \
+                                --username "$DOCKER_USERNAME" \
+                                --password-stdin
+
+                            echo "Docker login successful."
+                        '''
                     }
                 }
             }
         }
-        stage("TRIVY"){
-            steps{
-                sh "trivy image devopsvishal077758/chatbot:latest > trivy.json" 
+
+        stage('Docker Build') {
+            steps {
+                sh '''
+                    set -e
+
+                    echo "Building Docker image..."
+
+                    docker build \
+                        -t $DOCKER_IMAGE \
+                        Chatbot-UI
+
+                    echo "Docker image built successfully."
+
+                    docker images | grep chatbot || true
+                '''
             }
         }
-        stage ("Remove container") {
-            steps{
-                sh "docker stop chatbot | true"
-                sh "docker rm chatbot | true"
-             }
-        }
-        stage('Deploy to container'){
-            steps{
-                sh 'docker run -d --name chatbot -p 3000:3000 devopsvishal077758/chatbot:latest'
+
+        stage('Docker Push') {
+            steps {
+                sh '''
+                    set -e
+
+                    echo "Pushing Docker image..."
+
+                    docker push $DOCKER_IMAGE
+
+                    echo "Docker image pushed successfully."
+                '''
             }
         }
-        stage('Deploy to kubernetes'){
-            steps{
-                withAWS(credentials: 'aws-key', region: 'ap-south-1'){
-                script{
-                    withKubeConfig(caCertificate: '', clusterName: '', contextName: '', credentialsId: 'k8s', namespace: '', restrictKubeConfigAccess: false, serverUrl: '') {
-                       sh 'kubectl apply -f k8s/chatbot-ui.yaml'
-                  }
+
+        stage('Trivy Image Scan') {
+            steps {
+                sh '''
+                    echo "Scanning Docker image with Trivy..."
+
+                    trivy image \
+                        --severity HIGH,CRITICAL \
+                        --format table \
+                        $DOCKER_IMAGE | tee trivy-image.txt
+                '''
+            }
+        }
+
+        stage('Remove Old Container') {
+            steps {
+                sh '''
+                    echo "Stopping old container..."
+
+                    docker stop chatbot || true
+                    docker rm chatbot || true
+                '''
+            }
+        }
+
+        stage('Deploy to Container') {
+            steps {
+                sh '''
+                    set -e
+
+                    echo "Starting new Docker container..."
+
+                    docker run -d \
+                        --name chatbot \
+                        -p 3000:3000 \
+                        $DOCKER_IMAGE
+
+                    echo "Container started successfully."
+
+                    docker ps | grep chatbot
+                '''
+            }
+        }
+
+        stage('Deploy to Kubernetes') {
+            steps {
+                withAWS(
+                    credentials: 'aws-key',
+                    region: 'ap-south-1'
+                ) {
+                    withKubeConfig(
+                        caCertificate: '',
+                        clusterName: '',
+                        contextName: '',
+                        credentialsId: 'k8s',
+                        namespace: '',
+                        restrictKubeConfigAccess: false,
+                        serverUrl: ''
+                    ) {
+                        sh '''
+                            echo "Deploying application to Kubernetes..."
+
+                            kubectl apply \
+                                -f Chatbot-UI/k8s/chatbot-ui.yaml
+
+                            echo "Kubernetes deployment completed."
+
+                            kubectl get pods
+                            kubectl get services
+                        '''
+                    }
                 }
             }
         }
+    }
+
+    post {
+        success {
+            echo '========================================='
+            echo ' Jenkins Pipeline Completed Successfully '
+            echo '========================================='
+        }
+
+        failure {
+            echo '========================================='
+            echo ' Jenkins Pipeline Failed '
+            echo 'Check the console output for the error.'
+            echo '========================================='
+        }
+
+        always {
+            echo 'Pipeline execution completed.'
         }
     }
-    }
+}
