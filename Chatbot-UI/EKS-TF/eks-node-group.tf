@@ -1,18 +1,21 @@
 resource "aws_eks_node_group" "eks-node-group" {
-  cluster_name    = aws_eks_cluster.eks-cluster.name
+
+  cluster_name    = "chatbot-ai"
   node_group_name = var.eksnode-group-name
   node_role_arn   = aws_iam_role.NodeGroupRole.arn
-  subnet_ids      = [data.aws_subnet.subnet.id, aws_subnet.public-subnet2.id]
 
+  subnet_ids = [
+    "subnet-0c94ec4045b1d8b81"
+  ]
 
   scaling_config {
-    desired_size = 2
-    max_size     = 3
-    min_size     = 1
+    desired_size = 0
+    min_size     = 0
+    max_size     = 1
   }
 
-  ami_type       = "AL2_x86_64"
-  instance_types = ["t2.medium"]
+  ami_type       = "AL2023_x86_64_STANDARD"
+  instance_types = ["t3.medium"]
   disk_size      = 20
 
   depends_on = [
