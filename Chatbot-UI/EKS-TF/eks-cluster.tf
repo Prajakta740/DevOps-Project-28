@@ -1,12 +1,20 @@
-resource "aws_eks_cluster" "eks-cluster" {
-  name     = var.cluster-name
+resource "aws_eks_cluster" "eks_cluster" {
+  name     = "chatbot-ai"
   role_arn = aws_iam_role.EKSClusterRole.arn
+  version  = "1.33"
+
   vpc_config {
-    subnet_ids         = [data.aws_subnet.subnet.id, aws_subnet.public-subnet2.id]
-    security_group_ids = [data.aws_security_group.sg-default.id]
+    subnet_ids = [
+      "subnet-0c94ec4045b1d8b81",
+      "subnet-05d1825944a182b2a"
+    ]
+
+    security_group_ids = [
+      "sg-0608649d976b55966"
+    ]
   }
 
-  version = 1.28
-
-  depends_on = [aws_iam_role_policy_attachment.AmazonEKSClusterPolicy]
+  depends_on = [
+    aws_iam_role_policy_attachment.AmazonEKSClusterPolicy
+  ]
 }
