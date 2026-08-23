@@ -1,55 +1,59 @@
+##########################
+# Existing VPC
+##########################
+
 data "aws_vpc" "vpc" {
-  filter {
-    name   = "tag:Name"
-    values = [var.vpc-name]
-  }
+  id = "vpc-06d78dea03085b624"
 }
+
+##########################
+# Existing Internet Gateway
+##########################
 
 data "aws_internet_gateway" "igw" {
   filter {
-    name   = "tag:Name"
-    values = [var.igw-name]
+    name   = "attachment.vpc-id"
+    values = [data.aws_vpc.vpc.id]
   }
 }
 
-data "aws_subnet" "subnet" {
-  filter {
-    name   = "tag:Name"
-    values = [var.subnet-name]
-  }
-}
+##########################
+# Public Subnet
+##########################
 
-data "aws_security_group" "sg-default" {
-  filter {
-    name   = "tag:Name"
-    values = [var.security-group-name]
-  }
-}
-
-resource "aws_subnet" "public-subnet2" {
-  vpc_id                  = data.aws_vpc.vpc.id
-  cidr_block              = "10.0.2.0/24"
-  availability_zone       = "us-east-1b"
+resource "aws_subnet" "public_subnet2" {
+  vpc_id                  = "vpc-06d78dea03085b624"
+  cidr_block              = "172.31.64.0/20"   # Use an unused CIDR
+  availability_zone       = "ap-south-1b"
   map_public_ip_on_launch = true
 
   tags = {
-    Name = var.subnet-name2
+    Name = "public-subnet-2"
   }
 }
 
+##########################
+# Route Table
+##########################
+
 resource "aws_route_table" "rt2" {
   vpc_id = data.aws_vpc.vpc.id
+
   route {
     cidr_block = "0.0.0.0/0"
     gateway_id = data.aws_internet_gateway.igw.id
   }
 
   tags = {
-    Name = var.rt-name2
+    Name = "public-route-table"
   }
 }
 
-resource "aws_route_table_association" "rt-association2" {
+##########################
+# Route Table Association
+##########################
+
+resource "aws_route_table_association" "rt_association2" {
+  subnet_id      = aws_subnet.public_subnet2.id
   route_table_id = aws_route_table.rt2.id
-  subnet_id      = aws_subnet.public-subnet2.id
 }
