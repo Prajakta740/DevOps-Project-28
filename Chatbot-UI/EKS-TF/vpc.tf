@@ -3,7 +3,7 @@
 ##########################
 
 data "aws_vpc" "vpc" {
-  id = "vpc-06d78dea03085b624"
+  id = "vpc-0610e288ad79cc052"
 }
 
 ##########################
@@ -22,9 +22,9 @@ data "aws_internet_gateway" "igw" {
 ##########################
 
 resource "aws_subnet" "public_subnet2" {
-  vpc_id                  = "vpc-06d78dea03085b624"
+  vpc_id                  = "vpc-0610e288ad79cc052"
   cidr_block              = "172.31.64.0/20"   # Use an unused CIDR
-  availability_zone       = "ap-south-1b"
+  availability_zone       = "eu-north-1b"
   map_public_ip_on_launch = true
 
   tags = {
