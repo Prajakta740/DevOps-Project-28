@@ -5,18 +5,18 @@ resource "aws_eks_node_group" "eks-node-group" {
   node_role_arn   = aws_iam_role.NodeGroupRole.arn
 
   subnet_ids = [
-    "subnet-0c94ec4045b1d8b81"
+    "subnet-06ec860092db8ce7a"
   ]
 
   scaling_config {
-    desired_size = 0
-    min_size     = 0
-    max_size     = 1
+    desired_size = 2
+    min_size     = 1
+    max_size     = 3
   }
 
   ami_type       = "AL2023_x86_64_STANDARD"
-  instance_types = ["t3.medium"]
-  disk_size      = 20
+  instance_types = ["t3.xlarge"]
+  disk_size      = 40
 
   depends_on = [
     aws_iam_role_policy_attachment.AmazonEKSWorkerNodePolicy,
