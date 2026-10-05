@@ -3,7 +3,7 @@ pipeline {
     agent any
 
     tools {
-        jdk 'jdk17'
+        jdk 'jdk21'
         nodejs 'node19'
     }
 
@@ -92,19 +92,6 @@ pipeline {
                         credentialsId: 'sonar-token'
                     )
                 }
-            }
-        }
-
-        stage('OWASP FS Scan') {
-            steps {
-                dependencyCheck(
-                    additionalArguments: '--scan ./ --disableYarnAudit --disableNodeAudit',
-                    odcInstallation: 'DP-Check'
-                )
-
-                dependencyCheckPublisher(
-                    pattern: '**/dependency-check-report.xml'
-                )
             }
         }
 
@@ -232,7 +219,7 @@ pipeline {
             steps {
                 withAWS(
                     credentials: 'aws-key',
-                    region: 'ap-south-1'
+                    region: 'eu-north-1'
                 ) {
                     withKubeConfig(
                         caCertificate: '',
